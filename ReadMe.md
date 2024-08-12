@@ -1,4 +1,4 @@
-# Ethereum Monitoring Bot
+# Ethereum Adrress Monitoring Bot
 
 Welcome to the Ethereum Monitoring Bot! This project is a Telegram bot designed to monitor Ethereum addresses for transactions and provide real-time updates. It uses the Infura API to interact with the Ethereum blockchain and sends notifications to users when transactions occur on monitored addresses.
 
