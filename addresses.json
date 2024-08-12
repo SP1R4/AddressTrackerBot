@@ -1,0 +1,18 @@
+{
+    "Robinhood": {
+        "ether_address": "0x40B38765696e3d5d8d9d834D8AaD4bB6e418E489",
+        "last_seen_block": 20347126
+    },
+    "Binance 14": {
+        "ether_address": "0x28C6c06298d514Db089934071355E5743bf21d60",
+        "last_seen_block": 1234568
+    },
+    "Bitfinex 15": {
+        "ether_address": "0x5a710a3cDF2AF218740384c52a10852D8870626A",
+        "last_seen_block": 20370980
+    },
+    "Bithumb_12": {
+        "ether_address": "0x558553D54183a8542F7832742e7B4Ba9c33Aa1E6",
+        "last_seen_block": 20371067
+    }
+}
