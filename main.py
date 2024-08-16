@@ -1,17 +1,11 @@
+import os
 import time
 import threading
+import telebot
 from dotenv import load_dotenv
-#Import bot
 from bot_handler import config_bot, register_handlers
-#Import util functions
-from utils import (logger, 
-                   load_addresses, 
-                   save_addresses, 
-                   load_allowed_users)
-#Import web3 handle functions
-from web3_handler import (init_web3, 
-                          get_eth_transactions, 
-                          process_transaction)
+from utils import logger, load_addresses, save_addresses, load_allowed_users
+from web3_handler import init_web3, get_eth_transactions, process_transaction
 
 
 def monitor_addresses(web3, bot, addresses_to_monitor, allowed_users, lock):
@@ -47,52 +41,40 @@ def monitor_addresses(web3, bot, addresses_to_monitor, allowed_users, lock):
         time.sleep(60)
 
 def main():
-    """
-    Main function to initialize and start the bot, and begin monitoring Ethereum addresses.
-    """
-    # Load environment variables
-    load_dotenv()
-
-    INFURA_PROJECT_ID = 'YOUR_INFURA_KEY'
-    TELEGRAM_BOT_TOKEN = 'YOUR_TELEGRAM_KEY'
-
-    # Initialize global variables
-    addresses_to_monitor = {}
-    allowed_users = {}
-    user_state = {}
-    lock = threading.Lock()
-
-    # Configure and start the bot
-    bot = config_bot(TELEGRAM_BOT_TOKEN)
+    TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
+    INFURA_PROJECT_ID = os.getenv('INFURA_PROJECT_ID')
+    
     web3 = init_web3(INFURA_PROJECT_ID)
+    bot = config_bot(TELEGRAM_BOT_TOKEN)
+    lock = threading.Lock()
+    addresses_by_user = load_addresses()
+    allowed_users = load_allowed_users()
+    user_state = {}
 
+    register_handlers(bot, lock, addresses_by_user, allowed_users, user_state, web3)
+    
+    logger.info("Starting bot polling...")
+    try:
+        bot.polling(none_stop=True, interval=0, timeout=20)
+    except Exception as e:
+        logger.error(f"Bot polling failed with error: {e}")
+        bot.stop_polling()
+
+    polling_interval = 60  # seconds
     while True:
-        try:
-            # Load allowed users and addresses
-            allowed_users.update(load_allowed_users())
-            addresses_to_monitor.update(load_addresses())  # Update with the loaded addresses
-            logger.info(f"Allowed users: {allowed_users}")
-            logger.info(f"Addresses to monitor: {addresses_to_monitor}")
+        for chat_id in addresses_by_user:
+            for name, info in addresses_by_user[chat_id].items():
+                address = info['ether_address']
+                last_seen_block = info['last_seen_block']
+                latest_block = web3.eth.block_number
+                if latest_block > last_seen_block:
+                    transactions = get_eth_transactions(web3, address, last_seen_block + 1)
+                    for tx in transactions:
+                        process_transaction(web3, bot, tx, name, address, allowed_users, addresses_by_user)
+                    addresses_by_user[chat_id][name]['last_seen_block'] = latest_block
+                    save_addresses(addresses_by_user)
 
-            # Register bot handlers
-            register_handlers(bot, lock, addresses_to_monitor, allowed_users, user_state, web3)
-            
-            # Start the bot
-            bot.polling()
-
-            # Start monitoring thread with required parameters
-            monitor_thread = threading.Thread(target=monitor_addresses, args=(web3, bot, addresses_to_monitor, allowed_users, lock), daemon=True)
-            monitor_thread.start()
-
-            # Join the monitoring thread to keep it running
-            monitor_thread.join()
-
-        except KeyboardInterrupt:
-            logger.info("Monitoring stopped by user")
-            break
-        except Exception as e:
-            logger.error(f"Error occurred: {str(e)}. Restarting in 10 seconds...")
-            time.sleep(10)  # Wait for 10 seconds before restarting
+        time.sleep(polling_interval)
 
 if __name__ == "__main__":
     main()
