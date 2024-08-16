@@ -5,6 +5,7 @@ import logging
 from logging.handlers import RotatingFileHandler
 from typing import Dict, Any
 
+
 # Configure logging with rotation
 log_handler = RotatingFileHandler('monitor.log', maxBytes=1000000, backupCount=3)
 log_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
@@ -17,20 +18,26 @@ def load_addresses(file_path='addresses.json'):
     Load Ethereum addresses from a JSON file.
 
     :param file_path: Path to the JSON file containing the addresses.
-    :return: A dictionary with user chat IDs as keys and their addresses as values.
+    :return: A dictionary with Ethereum addresses and their details.
     """
-    addresses_by_user = {}
-    if os.path.exists(file_path):
-        try:
-            with open(file_path, 'r') as file:
-                addresses_by_user = json.load(file)
-            logger.info("Loaded addresses from file.")
-        except Exception as e:
-            logger.error(f"Error loading addresses: {e}")
-    else:
-        logger.info("No existing addresses to load.")
+    addresses_to_monitor = {}
     
-    return addresses_by_user
+    # Check if the file exists
+    if not os.path.exists(file_path):
+        # Create an empty file
+        with open(file_path, 'w') as file:
+            json.dump({}, file, indent=4)
+        logger.info(f"Created new file: {file_path}")
+
+    # Load the file if it exists
+    try:
+        with open(file_path, 'r') as file:
+            addresses_to_monitor = json.load(file)
+        logger.info("Loaded addresses from file.")
+    except Exception as e:
+        logger.error(f"Error loading addresses: {e}")
+    
+    return addresses_to_monitor
 
 def save_addresses(addresses_by_user):
     """
