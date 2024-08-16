@@ -1,27 +1,28 @@
 import telebot
+import threading
 from web3 import Web3
 import time
 import emoji
 from utils import logger
+from typing import Dict, Any, List
 
-
-def init_web3(INFURA_PROJECT_ID):
+def init_web3(INFURA_PROJECT_ID: str) -> Web3:
     """
     Initialize a Web3 instance connected to the Ethereum network via Infura.
     
     :param INFURA_PROJECT_ID: Infura project ID for accessing the Ethereum network.
     :return: Web3 instance connected to the Ethereum network.
-    :raises Exception: If the connection to Infura fails.
+    :raises ConnectionError: If the connection to Infura fails.
     """
     infura_url = f'https://mainnet.infura.io/v3/{INFURA_PROJECT_ID}'
     web3 = Web3(Web3.HTTPProvider(infura_url))
     if not web3.is_connected():
         logger.error("Failed to connect to Infura")
-        raise Exception("Failed to connect to Infura")
+        raise ConnectionError("Failed to connect to Infura")
     logger.info("Successfully connected to Infura")
     return web3
 
-def get_eth_balance(web3, address):
+def get_eth_balance(web3: Web3, address: str) -> float:
     """
     Fetch the Ethereum balance of a given address.
     
@@ -36,18 +37,9 @@ def get_eth_balance(web3, address):
         logger.error(f"Error fetching balance for {address}: {e}")
         return None
 
-def process_transaction(web3, bot, tx, name, address, allowed_users, addresses_to_monitor):
-    """
-    Process an Ethereum transaction and notify allowed users.
-    
-    :param web3: Web3 instance used for interacting with the Ethereum network.
-    :param bot: TeleBot instance used to send notifications.
-    :param tx: Transaction data to process.
-    :param name: Name associated with the Ethereum address.
-    :param address: Ethereum address related to the transaction.
-    :param allowed_users: Dictionary of users who are allowed to receive notifications.
-    :param addresses_to_monitor: Dictionary of addresses being monitored.
-    """
+def process_transaction(web3, bot, tx, name, address, allowed_users, addresses_by_user):
+    chat_id = tx['chat_id']  # Include user chat ID with the transaction
+
     try:
         tx_hash = tx['transactionHash'].hex()
         try:
@@ -75,14 +67,21 @@ def process_transaction(web3, bot, tx, name, address, allowed_users, addresses_t
                             bot.send_message(chat_id, message)
                         except telebot.apihelper.ApiTelegramException as e:
                             logger.error(f"Failed to send message to {username} ({chat_id}): {str(e)}")
-                addresses_to_monitor[name]['last_seen_block'] = block_number
+                addresses_by_user[chat_id][name]['last_seen_block'] = block_number
         except Exception as e:
             logger.error(f"Error processing transaction {tx_hash} for {name} ({address}): {str(e)}")
 
     except Exception as e:
         logger.error(f"Error processing transaction for {name} ({address}): {str(e)}")
 
-def show_address_history(web3, bot, lock, message, address_name, addresses_to_monitor):
+def show_address_history(
+    web3: Web3,
+    bot: telebot.TeleBot,
+    lock: threading.Lock,
+    message: telebot.types.Message,
+    address_name: str,
+    addresses_to_monitor: Dict[str, Dict[str, Any]]
+) -> None:
     """
     Show the transaction history for a specific Ethereum address.
     
@@ -115,7 +114,14 @@ def show_address_history(web3, bot, lock, message, address_name, addresses_to_mo
         else:
             bot.send_message(chat_id, f"Address with name '{address_name}' not found.")
 
-def show_address_details(web3, bot, lock, message, address_name, addresses_to_monitor):
+def show_address_details(
+    web3: Web3,
+    bot: telebot.TeleBot,
+    lock: threading.Lock,
+    message: telebot.types.Message,
+    address_name: str,
+    addresses_to_monitor: Dict[str, Dict[str, Any]]
+) -> None:
     """
     Show the details of a specific Ethereum address.
     
@@ -148,7 +154,7 @@ def show_address_details(web3, bot, lock, message, address_name, addresses_to_mo
         else:
             bot.send_message(chat_id, f"❌ Address with name '{address_name}' not found.")
 
-def is_valid_ethereum_address(address):
+def is_valid_ethereum_address(address: str) -> bool:
     """
     Validate if the provided address is a valid Ethereum address.
     
@@ -158,7 +164,11 @@ def is_valid_ethereum_address(address):
     web3 = Web3()
     return web3.is_address(address)
 
-def get_eth_transactions(web3, address, from_block):
+def get_eth_transactions(
+    web3: Web3,
+    address: str,
+    from_block: int
+) -> List[Dict[str, Any]]:
     """
     Retrieve Ethereum transactions for a given address starting from a specific block.
     
@@ -173,8 +183,9 @@ def get_eth_transactions(web3, address, from_block):
             'toBlock': 'latest',
             'address': address
         })
-        return [web3.eth.get_transaction(log['transactionHash']) for log in logs]
-    except (ConnectionError) as e:
+        transactions = [web3.eth.get_transaction(log['transactionHash']) for log in logs]
+        return transactions
+    except ConnectionError as e:
         logger.error(f"Network error while fetching logs for {address}: {str(e)}")
         return []
     except Exception as e:
